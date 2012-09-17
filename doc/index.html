@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><title>index</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="index"><meta name="groc-project-path" content="README.md"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">README.md</div></div><div id="document"><div class="segment"><div class="comments"><div class="wrapper"><h2 id="pidgeon-privacy-guard-api">Pidgeon Privacy Guard API</h2>
+
+<p>Addon-SDK module of the OpenPGP protocol <a href="http://tools.ietf.org/html/rfc4880">RFC4880</a> for Mozilla Firefox. </p>
+
+<h3 id="requirements">Requirements</h3>
+
+<ul>
+<li>Mozilla Firefox 14.0 or newer.</li>
+</ul>
+
+<h3 id="features">Features</h3>
+
+<h4 id="key-pair-generation">Key pair generation</h4>
+
+<ul>
+<li>RSA (1024/2048/4096 bits)</li>
+<li>DSA (1024 bits)</li>
+<li>ElGamal (1024 bits)</li>
+</ul>
+
+<h4 id="supported-asymmetric-algorithms">Supported asymmetric algorithms</h4>
+
+<ul>
+<li>RSA encryption and signatures (1024/2048/4096 bits)</li>
+<li>DSA signatures (1024/2028/3072 bits)</li>
+<li>ElGamal encryption (1024/2048/3072 bits)</li>
+</ul>
+
+<h4 id="tested-symmetric-algorithms">Tested symmetric algorithms</h4>
+
+<ul>
+<li>Cast5</li>
+<li>AES-256</li>
+</ul>
+
+<h4 id="compression-algorightms-used-for-decompression">Compression algorightms (used for decompression)</h4>
+
+<ul>
+<li>Zip</li>
+<li>Zlib</li>
+<li>Bzip2</li>
+</ul>
+
+<h3 id="use-instructions">Use instructions</h3>
+
+<p>Clone the repository to the 'packages/ppg-api' in your Addon path and add to your <code>package.json</code> file the following:</p>
+
+<p>...,`
+   "dependencies": ["addon-kit","api-utils","ppg-api"],
+   "packages": "./packages/ppg-api"
+   ...,</p>
+
+<p>Then include <code>var {ppgapp} = require('ppgapp')</code> to use the module.</p></div></div></div></div></body></html>

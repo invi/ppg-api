@@ -1,0 +1,65 @@
+<!DOCTYPE html><html lang="en"><head><title>util/prompt</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="util/prompt"><meta name="groc-project-path" content="lib/util/prompt.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">lib/util/prompt.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="kr">const</span> <span class="p">{</span><span class="nx">Cu</span><span class="p">,</span> <span class="nx">Ci</span><span class="p">,</span> <span class="nx">Cc</span><span class="p">,</span> <span class="nx">components</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;chrome&quot;</span><span class="p">);</span>
+<span class="kr">const</span> <span class="p">{</span><span class="nx">getStr</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;util/lang&quot;</span><span class="p">);</span>
+
+<span class="kd">var</span> <span class="p">{</span><span class="nx">XPCOMUtils</span><span class="p">}</span> <span class="o">=</span> <span class="nx">Cu</span><span class="p">.</span><span class="kr">import</span><span class="p">(</span><span class="s2">&quot;resource://gre/modules/XPCOMUtils.jsm&quot;</span><span class="p">);</span>
+<span class="nx">XPCOMUtils</span><span class="p">.</span><span class="nx">defineLazyServiceGetter</span><span class="p">(</span><span class="k">this</span><span class="p">,</span> <span class="s2">&quot;promptSvc&quot;</span><span class="p">,</span>
+                                   <span class="s2">&quot;@mozilla.org/embedcomp/prompt-service;1&quot;</span><span class="p">,</span>
+                                   <span class="s2">&quot;nsIPromptService&quot;</span><span class="p">);</span>
+
+<span class="kd">var</span> <span class="nx">STD_OK_CANCEL_BUTTONS</span> <span class="o">=</span> <span class="mi">513</span><span class="p">;</span>
+<span class="kd">var</span> <span class="nx">BUTTON_TITLE_OK</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+
+<span class="kd">var</span> <span class="nx">prompt</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="nx">newPassphrase</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">passphrase1</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="kd">let</span> <span class="nx">passphrase2</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="k">while</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">var</span> <span class="nx">prompt1</span> <span class="o">=</span> <span class="nx">promptSvc</span><span class="p">.</span><span class="nx">promptPassword</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span>
+                               <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;enterPassphraseTitle&quot;</span><span class="p">),</span>
+                               <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;enterPassphraseText&quot;</span><span class="p">),</span>
+                               <span class="nx">passphrase1</span><span class="p">,</span> <span class="kc">null</span><span class="p">,</span> <span class="p">{</span><span class="nx">value</span><span class="o">:</span> <span class="kc">false</span><span class="p">});</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">prompt1</span><span class="p">)</span> <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;passwordEnterCancelled&quot;</span><span class="p">);</span>
+      <span class="kd">var</span> <span class="nx">prompt2</span> <span class="o">=</span> <span class="nx">promptSvc</span><span class="p">.</span><span class="nx">promptPassword</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span>
+                               <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;confirmPassphraseTitle&quot;</span><span class="p">),</span>
+                               <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;confirmPassphraseText&quot;</span><span class="p">),</span>
+                               <span class="nx">passphrase2</span><span class="p">,</span> <span class="kc">null</span><span class="p">,</span> <span class="p">{</span><span class="nx">value</span><span class="o">:</span> <span class="kc">false</span><span class="p">});</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">prompt2</span><span class="p">)</span> <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;passwordEnterCancelled&quot;</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">passphrase1</span><span class="p">.</span><span class="nx">value</span> <span class="o">!=</span> <span class="nx">passphrase2</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span> 
+        <span class="k">this</span><span class="p">.</span><span class="nx">alert</span><span class="p">(</span><span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;passphrasesDoNotMatchTitle&quot;</span><span class="p">),</span> <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;passphrasesDoNotMatchText&quot;</span><span class="p">));</span>
+      <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">passphrase1</span><span class="p">.</span><span class="nx">value</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="k">this</span><span class="p">.</span><span class="nx">confirm</span><span class="p">(</span><span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;noPassphraseEntered&quot;</span><span class="p">),</span> <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;continueWithoutPassword&quot;</span><span class="p">)))</span>
+          <span class="k">break</span><span class="p">;</span>
+      <span class="p">}</span> <span class="k">else</span>
+        <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="p">{</span><span class="nx">passphrase</span><span class="o">:</span> <span class="nx">passphrase1</span><span class="p">.</span><span class="nx">value</span><span class="p">};</span>
+  <span class="p">},</span>
+  <span class="nx">enterPassphrase</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">passphrase</span> <span class="o">=</span> <span class="p">{};</span>
+    <span class="kd">let</span> <span class="nx">prompt</span> <span class="o">=</span>
+      <span class="nx">promptSvc</span><span class="p">.</span><span class="nx">promptPassword</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span>
+                               <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;enterPassphraseTitle&quot;</span><span class="p">),</span>
+                               <span class="nx">getStr</span><span class="p">(</span><span class="s2">&quot;enterPassphraseText&quot;</span><span class="p">),</span>
+                               <span class="nx">passphrase</span><span class="p">,</span> <span class="kc">null</span><span class="p">,</span> <span class="p">{</span><span class="nx">value</span><span class="o">:</span> <span class="kc">false</span><span class="p">});</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">prompt</span> <span class="o">&amp;&amp;</span> <span class="nx">passphrase</span><span class="p">.</span><span class="nx">value</span><span class="p">)</span> 
+      <span class="k">return</span> <span class="nx">passphrase</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span>
+    <span class="k">else</span>
+      <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;enterPasswordCancelled&quot;</span><span class="p">);</span>
+  <span class="p">},</span>
+  <span class="nx">alert</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">title</span><span class="p">,</span> <span class="nx">text</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">promptSvc</span><span class="p">.</span><span class="nx">alert</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">title</span><span class="p">,</span> <span class="nx">text</span><span class="p">);</span>
+  <span class="p">},</span>
+  <span class="nx">confirm</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">title</span><span class="p">,</span> <span class="nx">text</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span>  <span class="nx">promptSvc</span><span class="p">.</span><span class="nx">confirmEx</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span>
+                                <span class="nx">title</span><span class="p">,</span>
+                                <span class="nx">text</span><span class="p">,</span>
+                                <span class="nx">STD_OK_CANCEL_BUTTONS</span><span class="p">,</span> 
+                                <span class="kc">null</span><span class="p">,</span> 
+                                <span class="kc">null</span><span class="p">,</span>
+                                <span class="kc">null</span><span class="p">,</span>
+                                <span class="kc">null</span><span class="p">,</span>
+                                <span class="p">{</span><span class="nx">value</span><span class="o">:</span><span class="kc">false</span><span class="p">})</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nx">exports</span><span class="p">.</span><span class="nx">prompt</span> <span class="o">=</span> <span class="nx">prompt</span><span class="p">;</span></div></div></div></div></body></html>

@@ -1,0 +1,13 @@
+{
+    "name": "ppg-api", 
+    "license": "GPLv3", 
+    "author": "invi, vindio", 
+    "contributors": ["trotyl"],
+    "homepage": "https://github.com/invi/ppg-api",
+    "version": "0.21", 
+    "icon": "data/graphics/logo.png",
+    "icon64": "data/graphics/logo64.png",
+    "fullName": "PigeonPG for Firefox", 
+    "id": "jid1-rZzoSIgbQe8AMg", 
+    "description": "OpenPGP protocol implementation for Mozilla Firefox"
+}

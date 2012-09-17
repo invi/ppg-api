@@ -1,0 +1,249 @@
+<!DOCTYPE html><html lang="en"><head><title>crypto/ski</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="crypto/ski"><meta name="groc-project-path" content="lib/crypto/ski.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">lib/crypto/ski.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="kd">var</span> <span class="p">{</span><span class="nx">Cu</span><span class="p">,</span> <span class="nx">Ci</span><span class="p">,</span> <span class="nx">Cc</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;chrome&quot;</span><span class="p">);</span>
+<span class="kd">var</span> <span class="nx">prng</span> <span class="o">=</span> <span class="nx">Cc</span><span class="p">[</span><span class="s1">&#39;@mozilla.org/security/random-generator;1&#39;</span><span class="p">];</span>  
+
+<span class="kr">const</span> <span class="p">{</span><span class="nx">openpgp_symenc_cast5</span><span class="p">,</span> <span class="nx">cast5_encrypt</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;crypto/symmetric/cast5&quot;</span><span class="p">);</span>
+<span class="kr">const</span> <span class="nx">logger</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;util/logger&#39;</span><span class="p">).</span><span class="nx">create</span><span class="p">(</span><span class="s1">&#39;ski.js&#39;</span><span class="p">);</span>
+<span class="kr">const</span> <span class="nx">misc</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;util/misc&#39;</span><span class="p">);</span>
+<span class="kr">const</span> <span class="p">{</span><span class="nx">hashData</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s1">&#39;crypto/hash.js&#39;</span><span class="p">);</span>
+<span class="kr">const</span> <span class="p">{</span><span class="nx">keyExpansion</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;crypto/symmetric/aes&quot;</span><span class="p">);</span>
+<span class="kr">const</span> <span class="p">{</span><span class="nx">normal_cfb_decrypt</span><span class="p">,</span> <span class="nx">normal_cfb_encrypt</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;crypto/symmetric/openpgp.cfb.js&quot;</span><span class="p">);</span> 
+<span class="kr">const</span> <span class="p">{</span><span class="nx">prompt</span><span class="p">}</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;util/prompt.js&quot;</span><span class="p">);</span> 
+<span class="kr">const</span> <span class="nx">base64Decode</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;api-utils/base64&quot;</span><span class="p">).</span><span class="nx">decode</span><span class="p">;</span>
+<span class="kr">const</span> <span class="nx">base64Encode</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">&quot;api-utils/base64&quot;</span><span class="p">).</span><span class="nx">encode</span><span class="p">;</span>
+<span class="kr">const</span> <span class="nx">PASSPHRASE_TTL</span> <span class="o">=</span> <span class="mi">3600000</span><span class="p">;</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * produces a key using the specified passphrase and the defined hashAlgorithm </span>
+<span class="cm"> * @param passphrase [String] passphrase containing user input</span>
+<span class="cm"> * @return [String] produced key with a length corresponding to hashAlgorithm hash length</span>
+<span class="cm"> */</span>
+<span class="kd">function</span> <span class="nx">produce_key</span><span class="p">(</span><span class="nx">hashAlgorithm</span><span class="p">,</span> <span class="nx">mode</span><span class="p">,</span> <span class="nx">saltValue</span><span class="p">,</span> <span class="nx">c</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kd">var</span> <span class="nx">ret</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+  <span class="k">switch</span> <span class="p">(</span><span class="nx">mode</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="mi">0</span><span class="o">:</span>
+    <span class="nx">ret</span> <span class="o">=</span> <span class="nx">hashData</span><span class="p">(</span><span class="nx">hashAlgorithm</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+
+    <span class="k">case</span> <span class="mi">1</span><span class="o">:</span>
+    <span class="nx">ret</span> <span class="o">=</span> <span class="nx">hashData</span><span class="p">(</span><span class="nx">hashAlgorithm</span><span class="p">,</span> <span class="nx">saltValue</span><span class="o">+</span><span class="nx">passphrase</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+
+    <span class="k">case</span> <span class="mi">3</span><span class="o">:</span>
+    <span class="kd">var</span> <span class="nx">EXPBIAS</span> <span class="o">=</span> <span class="mi">6</span><span class="p">;</span>
+    <span class="kd">var</span> <span class="nx">count</span> <span class="o">=</span> <span class="p">(</span><span class="mi">16</span> <span class="o">+</span> <span class="p">(</span><span class="nx">c</span> <span class="o">&amp;</span> <span class="mi">15</span><span class="p">))</span> <span class="o">&lt;&lt;</span> <span class="p">((</span><span class="nx">c</span> <span class="o">&gt;&gt;</span> <span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="nx">EXPBIAS</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">isp</span> <span class="o">=</span> <span class="nx">saltValue</span> <span class="o">+</span> <span class="nx">passphrase</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="nx">isp</span><span class="p">.</span><span class="nx">length</span> <span class="o">&lt;</span> <span class="nx">count</span><span class="p">)</span>
+      <span class="nx">isp</span> <span class="o">+=</span> <span class="nx">saltValue</span> <span class="o">+</span> <span class="nx">passphrase</span><span class="p">;</span>      
+    <span class="nx">isp</span> <span class="o">=</span> <span class="nx">isp</span><span class="p">.</span><span class="nx">substr</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nx">count</span><span class="p">);</span>
+    <span class="nx">ret</span> <span class="o">=</span> <span class="nx">hashData</span><span class="p">(</span><span class="nx">hashAlgorithm</span><span class="p">,</span> <span class="nx">isp</span><span class="p">);</span>
+    <span class="k">break</span><span class="p">;</span>
+
+    <span class="k">default</span><span class="o">:</span>
+    <span class="nx">ret</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+  <span class="p">}</span> 
+  <span class="k">return</span> <span class="nx">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kd">var</span> <span class="nx">Ski</span> <span class="o">=</span> <span class="p">{</span>
+
+  <span class="nx">cached</span><span class="o">:</span> <span class="p">[],</span>
+
+  <span class="nx">wrapSkey</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">ski</span><span class="p">,</span> <span class="nx">skey</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">IV</span> <span class="o">=</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">atos</span><span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">iv</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">saltValue</span> <span class="o">=</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">atos</span><span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">salt</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">usage</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">var</span> <span class="nx">symkey</span> <span class="o">=</span> <span class="nx">produce_key</span><span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">hash_algo</span><span class="p">,</span> <span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">mode</span><span class="p">,</span> <span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">salt</span><span class="p">,</span> <span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">count</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">);</span>
+      <span class="kd">var</span> <span class="nx">cleartextMPIs</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+      <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span><span class="nx">i</span><span class="o">&lt;</span><span class="nx">skey</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span><span class="nx">i</span><span class="o">++</span><span class="p">)</span> 
+        <span class="nx">cleartextMPIs</span> <span class="o">+=</span> <span class="nx">skey</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+
+      <span class="k">if</span> <span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">usage</span> <span class="o">==</span> <span class="mi">254</span><span class="p">)</span>
+        <span class="nx">cleartextMPIs</span> <span class="o">+=</span> <span class="nx">hashData</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="nx">cleartextMPIs</span><span class="p">);</span>  
+      <span class="k">else</span> 
+        <span class="nx">cleartextMPIs</span> <span class="o">+=</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">calc_checksum</span><span class="p">(</span><span class="nx">cleartextMPIs</span><span class="p">)</span>
+
+      <span class="kd">var</span> <span class="nx">wrapped_skey</span> <span class="o">=</span> <span class="nx">normal_cfb_encrypt</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">block</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">ret</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+        <span class="k">try</span> <span class="p">{</span>
+          <span class="kd">var</span> <span class="nx">cast5</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">openpgp_symenc_cast5</span><span class="p">();</span>
+          <span class="nx">cast5</span><span class="p">.</span><span class="nx">setKey</span><span class="p">(</span><span class="nx">key</span><span class="p">);</span>
+          <span class="nx">ret</span> <span class="o">=</span> <span class="nx">cast5</span><span class="p">.</span><span class="nx">encrypt</span><span class="p">(</span><span class="nx">misc</span><span class="p">.</span><span class="nx">str2bin</span><span class="p">(</span><span class="nx">block</span><span class="p">));</span> 
+        <span class="p">}</span> <span class="k">catch</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span> 
+          <span class="nx">logger</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span> 
+        <span class="p">}</span> <span class="k">finally</span> <span class="p">{</span>
+          <span class="k">return</span> <span class="nx">ret</span><span class="p">;</span>
+        <span class="p">}</span>
+      <span class="p">},</span> <span class="nx">IV</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">str2bin</span><span class="p">(</span><span class="nx">symkey</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">16</span><span class="p">)),</span> <span class="nx">cleartextMPIs</span><span class="p">,</span> <span class="nx">IV</span><span class="p">);</span>
+      <span class="k">return</span> <span class="p">[</span> <span class="nx">wrapped_skey</span> <span class="p">];</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">skey</span><span class="p">;</span>
+  <span class="p">},</span>
+
+  <span class="nx">generate</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">skey</span><span class="p">,</span> <span class="nx">primarySki</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="kr">const</span> <span class="nx">NOB</span> <span class="o">=</span> <span class="mi">8</span><span class="p">;</span> <span class="c1">// number of bytes  </span>
+    <span class="kd">var</span> <span class="nx">ski</span><span class="p">;</span>
+    <span class="kd">var</span> <span class="nx">passphrase</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">primarySki</span><span class="p">)</span> <span class="p">{</span>
+      <span class="nx">ski</span> <span class="o">=</span> <span class="nx">primarySki</span><span class="p">;</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">usage</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">passphrase</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">getCachedPassphrase</span><span class="p">(</span><span class="nx">ski</span><span class="p">);</span>
+      <span class="p">}</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> 
+      <span class="nx">passphrase</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">enterNewPassphrase</span><span class="p">();</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">passphrase</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">ski</span> <span class="o">=</span> <span class="p">{</span> 
+          <span class="nx">usage</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+          <span class="nx">s2k</span><span class="o">:</span> <span class="p">{</span>
+            <span class="nx">mode</span><span class="o">:</span> <span class="mi">0</span><span class="p">,</span>
+          <span class="p">},</span>
+        <span class="p">};</span>
+      <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">IV</span> <span class="o">=</span>  <span class="nx">prng</span><span class="p">.</span><span class="nx">getService</span><span class="p">(</span><span class="nx">Ci</span><span class="p">.</span><span class="nx">nsIRandomGenerator</span><span class="p">).</span><span class="nx">generateRandomBytes</span><span class="p">(</span><span class="nx">NOB</span><span class="p">,</span> <span class="s2">&quot;asdfqwersadf&quot;</span><span class="p">);</span>  
+        <span class="nx">saltValue</span> <span class="o">=</span> <span class="nx">prng</span><span class="p">.</span><span class="nx">getService</span><span class="p">(</span><span class="nx">Ci</span><span class="p">.</span><span class="nx">nsIRandomGenerator</span><span class="p">).</span><span class="nx">generateRandomBytes</span><span class="p">(</span><span class="nx">NOB</span><span class="p">,</span> <span class="s2">&quot;asdfsfsdfsd&quot;</span><span class="p">);</span>  
+        <span class="nx">ski</span> <span class="o">=</span> <span class="p">{</span> 
+          <span class="nx">usage</span><span class="o">:</span> <span class="mi">254</span><span class="p">,</span>
+          <span class="nx">s2k</span><span class="o">:</span> <span class="p">{</span>
+            <span class="nx">mode</span><span class="o">:</span> <span class="mi">3</span><span class="p">,</span>
+            <span class="nx">hash_algo</span><span class="o">:</span> <span class="mi">2</span><span class="p">,</span>
+            <span class="nx">salt</span><span class="o">:</span> <span class="nx">saltValue</span><span class="p">,</span>
+            <span class="nx">count</span><span class="o">:</span> <span class="mi">96</span><span class="p">,</span>
+          <span class="p">},</span>
+          <span class="nx">algo</span><span class="o">:</span> <span class="mi">3</span><span class="p">,</span>
+          <span class="nx">iv</span><span class="o">:</span> <span class="nx">IV</span><span class="p">,</span>
+        <span class="p">};</span>
+      <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">var</span> <span class="nx">ret_skey</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">usage</span><span class="p">)</span>
+      <span class="nx">ret_skey</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">wrapSkey</span><span class="p">(</span><span class="nx">ski</span><span class="p">,</span> <span class="nx">skey</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">);</span>
+    <span class="k">else</span> 
+      <span class="nx">ret_skey</span> <span class="o">=</span> <span class="nx">skey</span><span class="p">;</span>
+
+  
+    <span class="k">return</span> <span class="p">{</span><span class="nx">skey</span><span class="o">:</span> <span class="nx">ret_skey</span><span class="p">,</span> <span class="nx">ski</span><span class="o">:</span> <span class="nx">ski</span><span class="p">};</span>
+  <span class="p">},</span>
+
+  <span class="nx">removeWrongPassphrase</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">ski</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">ski64</span> <span class="o">=</span> <span class="nx">base64Encode</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">ski</span><span class="p">));</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="nx">i</span><span class="o">&lt;</span><span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">ski64</span> <span class="o">==</span> <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">ski</span><span class="p">)</span> 
+        <span class="k">delete</span> <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+    <span class="p">}</span> 
+  <span class="p">},</span>
+
+  <span class="nx">enterNewPassphrase</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">ski</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="p">{</span><span class="nx">passphrase</span><span class="p">}</span> <span class="o">=</span> <span class="nx">prompt</span><span class="p">.</span><span class="nx">newPassphrase</span><span class="p">();</span>
+    <span class="kd">var</span> <span class="nx">ski64</span> <span class="o">=</span> <span class="nx">base64Encode</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">ski</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">passphrase</span><span class="p">)</span> 
+      <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="nx">passphrase</span><span class="o">:</span> <span class="nx">passphrase</span><span class="p">,</span>
+                        <span class="nx">last_entered</span><span class="o">:</span> <span class="nb">Date</span><span class="p">.</span><span class="nx">now</span><span class="p">(),</span>
+                        <span class="nx">ski</span><span class="o">:</span> <span class="nx">ski64</span><span class="p">});</span>
+    <span class="k">return</span> <span class="nx">passphrase</span><span class="p">;</span>
+  <span class="p">},</span>
+
+  <span class="nx">getCachedPassphrase</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">_ski</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">ski64</span> <span class="o">=</span> <span class="nx">base64Encode</span><span class="p">(</span><span class="nx">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">(</span><span class="nx">_ski</span><span class="p">));</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span><span class="o">=</span><span class="mi">0</span><span class="p">;</span> <span class="nx">i</span><span class="o">&lt;</span><span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kd">var</span> <span class="p">{</span><span class="nx">last_entered</span><span class="p">,</span> <span class="nx">ski</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">}</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">ski</span> <span class="o">==</span> <span class="nx">ski64</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">((</span><span class="nb">Date</span><span class="p">.</span><span class="nx">now</span><span class="p">()</span> <span class="o">-</span> <span class="nx">last_entered</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nx">PASSPHRASE_TTL</span><span class="p">)</span> <span class="p">{</span>
+          <span class="kd">var</span> <span class="nx">enteredPassphrase</span> <span class="o">=</span> <span class="nx">prompt</span><span class="p">.</span><span class="nx">enterPassphrase</span><span class="p">();</span>
+          <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">passphrase</span> <span class="o">=</span> <span class="nx">enteredPassphrase</span><span class="p">;</span>
+          <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">last_entered</span> <span class="o">=</span> <span class="nb">Date</span><span class="p">.</span><span class="nx">now</span><span class="p">;</span>
+          <span class="k">return</span> <span class="nx">enteredPassphrase</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">else</span> 
+          <span class="k">return</span> <span class="nx">passphrase</span><span class="p">;</span>
+      <span class="p">}</span>
+    <span class="p">}</span> 
+    <span class="kd">var</span> <span class="nx">enteredPassphrase</span> <span class="o">=</span> <span class="nx">prompt</span><span class="p">.</span><span class="nx">enterPassphrase</span><span class="p">();</span>
+    <span class="k">this</span><span class="p">.</span><span class="nx">cached</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="nx">passphrase</span><span class="o">:</span> <span class="nx">enteredPassphrase</span><span class="p">,</span>
+                      <span class="nx">last_entered</span><span class="o">:</span> <span class="nb">Date</span><span class="p">.</span><span class="nx">now</span><span class="p">(),</span>
+                      <span class="nx">ski</span><span class="o">:</span> <span class="nx">ski64</span><span class="p">});</span>
+    <span class="k">return</span> <span class="nx">enteredPassphrase</span><span class="p">;</span>
+  <span class="p">},</span>
+
+  <span class="cm">/**</span>
+<span class="cm">   * Decrypts the private key MPIs which are needed to use the key.</span>
+<span class="cm">   * openpgp_packet_keymaterial.hasUnencryptedSecretKeyData should be false otherwise</span>
+<span class="cm">   * a call to this function is not needed</span>
+<span class="cm">   * </span>
+<span class="cm">   * @param str_passphrase the passphrase for this private key as string</span>
+<span class="cm">   * @return true if the passphrase was correct; false if not</span>
+<span class="cm">   */</span>
+  <span class="nx">unwrapSkey</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">pubkey_algo</span><span class="p">,</span> <span class="nx">ski</span><span class="p">,</span> <span class="nx">wrapped_skey</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="p">{</span><span class="nx">usage</span><span class="p">}</span> <span class="o">=</span> <span class="nx">ski</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">usage</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="k">return</span> <span class="nx">wrapped_skey</span><span class="p">;</span>
+
+    <span class="kd">var</span> <span class="nx">encryptedMPIData</span> <span class="o">=</span> <span class="nx">wrapped_skey</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+    <span class="kd">var</span> <span class="p">{</span><span class="nx">algo</span><span class="p">}</span> <span class="o">=</span> <span class="nx">ski</span><span class="p">;</span>
+    <span class="kd">var</span> <span class="nx">IV</span> <span class="o">=</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">atos</span><span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">iv</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">passphrase</span> <span class="o">=</span> <span class="k">this</span><span class="p">.</span><span class="nx">getCachedPassphrase</span><span class="p">(</span><span class="nx">ski</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">symkey</span> <span class="o">=</span> <span class="nx">produce_key</span><span class="p">(</span><span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">hash_algo</span><span class="p">,</span> <span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">mode</span><span class="p">,</span> <span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">salt</span><span class="p">,</span> 
+                             <span class="nx">ski</span><span class="p">.</span><span class="nx">s2k</span><span class="p">.</span><span class="nx">count</span><span class="p">,</span> <span class="nx">passphrase</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">cleartextMPIs</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="p">;</span>
+  
+    <span class="k">switch</span> <span class="p">(</span><span class="nx">algo</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">case</span>  <span class="mi">1</span><span class="o">:</span> <span class="c1">// - IDEA [IDEA]</span>
+      <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;symmetric encryption algorithim: IDEA is not implemented&quot;</span><span class="p">);</span>
+    <span class="k">case</span>  <span class="mi">2</span><span class="o">:</span> <span class="c1">// - TripleDES (DES-EDE, [SCHNEIER] [HAC] - 168 bit key derived from 192)</span>
+      <span class="nx">cleartextMPIs</span> <span class="o">=</span> <span class="nx">normal_cfb_decrypt</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">block</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">return</span> <span class="nx">des</span><span class="p">(</span><span class="nx">key</span><span class="p">,</span> <span class="nx">block</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="kc">null</span><span class="p">,</span><span class="mi">0</span><span class="p">);</span>
+      <span class="p">},</span> <span class="nx">IV</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">symkey</span><span class="p">,</span> <span class="nx">encryptedMPIData</span><span class="p">,</span> <span class="nx">IV</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span>  <span class="mi">3</span><span class="o">:</span> <span class="c1">// - CAST5 (128 bit key, as per [RFC2144])</span>
+      <span class="nx">cleartextMPIs</span> <span class="o">=</span> <span class="nx">normal_cfb_decrypt</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">block</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
+          <span class="kd">var</span> <span class="nx">ret</span><span class="p">;</span>
+          <span class="k">try</span> <span class="p">{</span>
+            <span class="kd">var</span> <span class="nx">cast5</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">openpgp_symenc_cast5</span><span class="p">();</span>
+            <span class="nx">cast5</span><span class="p">.</span><span class="nx">setKey</span><span class="p">(</span><span class="nx">key</span><span class="p">);</span>
+            <span class="nx">ret</span> <span class="o">=</span> <span class="nx">cast5</span><span class="p">.</span><span class="nx">encrypt</span><span class="p">(</span><span class="nx">misc</span><span class="p">.</span><span class="nx">str2bin</span><span class="p">(</span><span class="nx">block</span><span class="p">));</span> 
+          <span class="p">}</span> <span class="k">catch</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">logger</span><span class="p">.</span><span class="nx">error</span><span class="p">(</span><span class="nx">err</span><span class="p">)</span> 
+          <span class="p">}</span> <span class="k">finally</span> <span class="p">{</span>
+            <span class="k">return</span> <span class="nx">ret</span><span class="p">;</span>
+          <span class="p">}</span>
+      <span class="p">},</span> <span class="nx">IV</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">str2bin</span><span class="p">(</span><span class="nx">symkey</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">16</span><span class="p">)),</span> <span class="nx">encryptedMPIData</span><span class="p">,</span> <span class="nx">IV</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span>  <span class="mi">4</span><span class="o">:</span> <span class="c1">// - Blowfish (128 bit key, 16 rounds) [BLOWFISH]</span>
+      <span class="nx">cleartextMPIs</span> <span class="o">=</span> <span class="nx">normal_cfb_decrypt</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">block</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">blowfish</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Blowfish</span><span class="p">(</span><span class="nx">key</span><span class="p">);</span>
+          <span class="k">return</span> <span class="nx">blowfish</span><span class="p">.</span><span class="nx">encrypt</span><span class="p">(</span><span class="nx">block</span><span class="p">);</span> 
+      <span class="p">},</span> <span class="nx">IV</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">symkey</span><span class="p">,</span> <span class="nx">encryptedMPIData</span><span class="p">,</span> <span class="nx">IV</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span>  <span class="mi">7</span><span class="o">:</span> <span class="c1">// - AES with 128-bit key [AES]</span>
+    <span class="k">case</span>  <span class="mi">8</span><span class="o">:</span> <span class="c1">// - AES with 192-bit key</span>
+    <span class="k">case</span>  <span class="mi">9</span><span class="o">:</span> <span class="c1">// - AES with 256-bit key        </span>
+      <span class="nx">cleartextMPIs</span> <span class="o">=</span> <span class="nx">normal_cfb_decrypt</span><span class="p">(</span><span class="nx">AESencrypt</span><span class="p">,</span>
+          <span class="nx">IV</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span> <span class="nx">keyExpansion</span><span class="p">(</span><span class="nx">symkey</span><span class="p">),</span> <span class="nx">encryptedMPIData</span><span class="p">,</span> <span class="nx">IV</span><span class="p">);</span>
+      <span class="k">break</span><span class="p">;</span>
+    <span class="k">case</span> <span class="mi">10</span><span class="o">:</span> <span class="c1">// - Twofish with 256-bit key [TWOFISH]</span>
+      <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;Key material is encrypted with twofish: not implemented&quot;</span><span class="p">);</span>       
+    <span class="k">case</span>  <span class="mi">5</span><span class="o">:</span> <span class="c1">// - Reserved</span>
+    <span class="k">case</span>  <span class="mi">6</span><span class="o">:</span> <span class="c1">// - Reserved</span>
+    <span class="k">default</span><span class="o">:</span>
+      <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;Unknown encryption algorithm for secret key: &quot;</span><span class="o">+</span><span class="nx">algo</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="nx">cleartextMPIs</span> <span class="o">==</span> <span class="kc">null</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">throw</span> <span class="nb">Error</span><span class="p">(</span><span class="s2">&quot;cleartextMPIs was null&quot;</span><span class="p">);</span>
+    <span class="p">}</span>
+    
+    <span class="k">if</span> <span class="p">(</span><span class="nx">usage</span> <span class="o">==</span> <span class="mi">254</span> <span class="o">&amp;&amp;</span>
+        <span class="nx">hashData</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">20</span><span class="p">))</span> <span class="o">==</span> 
+          <span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">20</span><span class="p">))</span> <span class="p">{</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">usage</span> <span class="o">!=</span> <span class="mi">254</span> <span class="o">&amp;&amp;</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">calc_checksum</span><span class="p">(</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span> <span class="mi">2</span><span class="p">))</span> <span class="o">==</span> 
+        <span class="p">(</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">charCodeAt</span><span class="p">(</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span> <span class="o">|</span> <span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">charCodeAt</span><span class="p">(</span><span class="nx">cleartextMPIs</span><span class="p">.</span><span class="nx">length</span> <span class="o">-</span><span class="mi">1</span><span class="p">)))</span> <span class="p">{</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+      <span class="k">this</span><span class="p">.</span><span class="nx">removeWrongPassphrase</span><span class="p">(</span><span class="nx">ski</span><span class="p">);</span> 
+      <span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">misc</span><span class="p">.</span><span class="nx">mpi_read_seckey</span><span class="p">(</span><span class="nx">pubkey_algo</span><span class="p">,</span> <span class="nx">cleartextMPIs</span><span class="p">);</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="nx">exports</span><span class="p">.</span><span class="nx">Ski</span> <span class="o">=</span> <span class="nx">Ski</span><span class="p">;</span></div></div></div></div></body></html>
