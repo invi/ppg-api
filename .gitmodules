@@ -1,0 +1,9 @@
+[submodule "vold-utils-jplib"]
+	path = vold-utils-jplib
+	url = https://github.com/voldsoftware/vold-utils-jplib.git
+[submodule "packages/vold-utils-jplib"]
+	path = packages/vold-utils-jplib
+	url = https://github.com/voldsoftware/vold-utils-jplib.git
+[submodule "packages/menuitems-jplib"]
+	path = packages/menuitems-jplib
+	url = https://github.com/voldsoftware/menuitems-jplib.git
