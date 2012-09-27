@@ -36,8 +36,12 @@ Addon-SDK module of the OpenPGP protocol [RFC4880](http://tools.ietf.org/html/rf
 Clone the repository to the 'ppg-api' path inside your Addon path or add the repository as a submodule:
 
 > git clone https://github.com/invi/ppg-api
+>
 > git submodule init 
+>
 > git submodule update
+
+When running the extension with the Add-on SDK environment the testing terminal is accessible from the 'Tools' menu.
 
 ### Module usage instructions
 
